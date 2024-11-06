@@ -1,0 +1,70 @@
+name: Deploy to Azure Functions
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_FUNCTIONAPP_NAME: tipgeberbot
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
+  PYTHON_VERSION: '3.11'
+  AZURE_RESOURCE_GROUP: tipgeber_bot
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_6F6D2105DE4F4E1B9DA87F28257D1F3D }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_95D1180BD0FF4C56AF74F0C8845DC24F }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_47A1E96B62E5454298A3875CCA7A18E5 }}
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        id: fa
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          respect-funcignore: true
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
+
+      - name: Remove WEBSITE_RUN_FROM_PACKAGE app setting
+        run: |
+          az functionapp config appsettings delete \
+            --name ${{ env.AZURE_FUNCTIONAPP_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --setting-names WEBSITE_RUN_FROM_PACKAGE
+
+      - name: Remove WEBSITE_ENABLE_SYNC_UPDATE_SITE app setting
+        run: |
+          az functionapp config appsettings delete \
+            --name ${{ env.AZURE_FUNCTIONAPP_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --setting-names WEBSITE_ENABLE_SYNC_UPDATE_SITE
+
+      - name: Set FUNCTIONS_WORKER_RUNTIME to Python
+        run: |
+          az functionapp config appsettings set \
+            --name ${{ env.AZURE_FUNCTIONAPP_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --settings FUNCTIONS_WORKER_RUNTIME=python
